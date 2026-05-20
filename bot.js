@@ -23,7 +23,7 @@ const client = new Client({
 
 // ================= AYARLAR =================
 
-const TOKEN = "..";
+const TOKEN = process.env.TOKEN;
 const OWNER_ID = "970622873431601172";
 const GUILD_ID = "1337903502944636959";
 
