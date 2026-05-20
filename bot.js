@@ -2,10 +2,7 @@ const {
     Client,
     GatewayIntentBits,
     SlashCommandBuilder,
-    PermissionsBitField
-} = require('discord.js');
-
-const {
+    PermissionsBitField,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -24,14 +21,18 @@ const client = new Client({
 // ================= AYARLAR =================
 
 const TOKEN = process.env.TOKEN;
+
 const OWNER_ID = "970622873431601172";
 const GUILD_ID = "1337903502944636959";
 
-// Komut kullanabilecek roller
+// Yetkili roller
 const ALLOWED_ROLES = [
     "1506422575352254575",
     "1337924532735967293"
 ];
+
+// Partner rol ID
+const PARTNER_ROLE_ID = "1506492222118563851";
 
 // Küfür sistemi
 const warningSystem = new Map();
@@ -39,6 +40,8 @@ const warningSystem = new Map();
 // Bot aktif/pasif
 let botActive = true;
 
+// ===========================================
+// READY
 // ===========================================
 
 client.once('ready', async () => {
@@ -50,127 +53,26 @@ client.once('ready', async () => {
     if (!guild) {
         return console.log("❌ Sunucu bulunamadı!");
     }
-// ================= PARTNER BUTTON =================
 
-client.on('messageCreate', async message => {
+    // Slash komutları temizle
+    await guild.commands.set([]);
 
-    if (message.author.bot) return;
-
-    // Sadece owner kullanabilsin
-    if (message.content === '!partnerpanel') {
-
-        if (message.author.id !== OWNER_ID) {
-            return;
-        }
-
-        const button = new ButtonBuilder()
-            .setCustomId('partner_role')
-            .setLabel('✅ Partner Rolünü Al')
-            .setStyle(ButtonStyle.Success);
-
-        const row = new ActionRowBuilder()
-            .addComponents(button);
-
-        await message.channel.send({
-            content: '📢 Partnerliği görmek istiyorsan aşağıdaki butona bas!',
-            components: [row]
-        });
-    }
-});
-// ================= PARTNER ROLE =================
-
-client.on('interactionCreate', async interaction => {
-
-    if (!interaction.isButton()) return;
-
-    if (interaction.customId === 'partner_role') {
-
-        const roleId = "1506492222118563851";
-
-        const member = interaction.member;
-
-        // Rol varsa kaldır
-        if (member.roles.cache.has(roleId)) {
-
-            await member.roles.remove(roleId);
-
-            return interaction.reply({
-                content: '❌ Partner rolün kaldırıldı!',
-                ephemeral: true
-            });
-        }
-
-        // Rol ver
-        await member.roles.add(roleId);
-
-        return interaction.reply({
-            content: '✅ Partner rolü verildi!',
-            ephemeral: true
-        });
-    }
-});
-// ================= PARTNER PANEL =================
-
-client.on('messageCreate', async message => {
-
-    if (message.author.bot) return;
-
-    if (message.content === '!partnerpanel') {
-
-        // Sadece owner kullanabilsin
-        if (message.author.id !== OWNER_ID) {
-            return;
-        }
-
-        // EMBED PANEL
-        const embed = new EmbedBuilder()
-            .setColor('#111827')
-            .setTitle('📢 Partner Kanalı Erişimi')
-            .setDescription(
-                '### Partnerliği görmek istiyorsan aşağıdaki butona bas!\n\n' +
-                '> ✅ Butona bastığında otomatik olarak partner rolünü alırsın.'
-            )
-            .addFields(
-                {
-                    name: '🎁 Avantajlar',
-                    value:
-                        '• Partner kanalını görürsün\n' +
-                        '• Reklam paylaşabilirsin\n' +
-                        '• Partner duyurularını alırsın',
-                    inline: false
-                }
-            )
-            .setFooter({
-                text: 'Zenith Partner Sistemi'
-            });
-
-        // BUTON
-        const button = new ButtonBuilder()
-            .setCustomId('partner_role')
-            .setLabel('Partner Rolünü Al')
-            .setEmoji('✅')
-            .setStyle(ButtonStyle.Success);
-
-        const row = new ActionRowBuilder()
-            .addComponents(button);
-
-        // PANELİ GÖNDER
-        await message.channel.send({
-            embeds: [embed],
-            components: [row]
-        });
-    }
-});
     // ================= MUTE =================
 
     await guild.commands.create(
         new SlashCommandBuilder()
             .setName('mute')
-            .setDescription('Kullanıcıyı mute atar')
+            .setDescription('Kullanıcıyı mute eder')
             .addUserOption(option =>
                 option
                     .setName('user')
                     .setDescription('Mute atılacak kişi')
+                    .setRequired(true)
+            )
+            .addIntegerOption(option =>
+                option
+                    .setName('duration')
+                    .setDescription('Süre (dakika)')
                     .setRequired(true)
             )
             .addStringOption(option =>
@@ -178,14 +80,6 @@ client.on('messageCreate', async message => {
                     .setName('reason')
                     .setDescription('Mute nedeni')
                     .setRequired(false)
-            )
-            .addIntegerOption(option =>
-                option
-                    .setName('duration')
-                    .setDescription('Süre (dakika)')
-                    .setRequired(false)
-                    .setMinValue(1)
-                    .setMaxValue(1440)
             )
     );
 
@@ -228,11 +122,11 @@ client.on('messageCreate', async message => {
     await guild.commands.create(
         new SlashCommandBuilder()
             .setName('unban')
-            .setDescription('Kullanıcının banını kaldırır')
+            .setDescription('Ban kaldırır')
             .addStringOption(option =>
                 option
                     .setName('userid')
-                    .setDescription('Banı kaldırılacak kişinin IDsi')
+                    .setDescription('Kullanıcı ID')
                     .setRequired(true)
             )
     );
@@ -240,31 +134,67 @@ client.on('messageCreate', async message => {
     console.log("✅ Slash komutları yüklendi!");
 });
 
-// ================= SLASH KOMUTLARI =================
+// ===========================================
+// SLASH KOMUTLARI
+// ===========================================
 
 client.on('interactionCreate', async interaction => {
 
+    // ================= PARTNER BUTTON =================
+
+    if (interaction.isButton()) {
+
+        if (interaction.customId === 'partner_role') {
+
+            const member = interaction.member;
+
+            if (member.roles.cache.has(PARTNER_ROLE_ID)) {
+
+                await member.roles.remove(PARTNER_ROLE_ID);
+
+                return interaction.reply({
+                    content: '❌ Partner rolün kaldırıldı!',
+                    ephemeral: true
+                });
+            }
+
+            await member.roles.add(PARTNER_ROLE_ID);
+
+            return interaction.reply({
+                content: '✅ Partner rolü verildi!',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Slash değilse çık
     if (!interaction.isChatInputCommand()) return;
 
+    // Bot pasif mi?
     if (!botActive) {
+
         return interaction.reply({
             content: "⛔ Bot pasif durumda!",
             ephemeral: true
         });
     }
 
+    // Yetki kontrolü
     const hasRole = interaction.member.roles.cache.some(role =>
         ALLOWED_ROLES.includes(role.id)
     );
 
     if (!hasRole) {
+
         return interaction.reply({
-            content: "❌ Yetkin yok!",
+            content: "❌ Bu komutu kullanamazsın!",
             ephemeral: true
         });
     }
 
-    // ================= MUTE =================
+    // ===========================================
+    // MUTE
+    // ===========================================
 
     if (interaction.commandName === 'mute') {
 
@@ -273,28 +203,49 @@ client.on('interactionCreate', async interaction => {
         try {
 
             const user = interaction.options.getUser('user');
-            const reason = interaction.options.getString('reason') || 'Belirtilmedi';
-            const duration = interaction.options.getInteger('duration') || 10;
+            const duration = interaction.options.getInteger('duration');
+            const reason =
+                interaction.options.getString('reason') || 'Belirtilmedi';
 
-            const member = await interaction.guild.members.fetch(user.id);
+            const member =
+                await interaction.guild.members.fetch(user.id);
 
-            await member.timeout(duration * 60 * 1000, reason);
+            // Yönetici koruması
+            if (
+                member.permissions.has(
+                    PermissionsBitField.Flags.Administrator
+                )
+            ) {
+
+                return interaction.editReply({
+                    content: '❌ Yönetici mute edilemez!'
+                });
+            }
+
+            await member.timeout(
+                duration * 60 * 1000,
+                reason
+            );
 
             await interaction.editReply({
-                content: `✅ ${user.tag} ${duration} dakika mute edildi!`
+                content:
+                    `✅ ${user.tag} ${duration} dakika mute edildi!\n` +
+                    `📝 Sebep: ${reason}`
             });
 
         } catch (err) {
 
             console.error(err);
 
-            await interaction.editReply({
-                content: "❌ Hata oluştu!"
+            interaction.editReply({
+                content: '❌ Hata oluştu!'
             });
         }
     }
 
-    // ================= UNMUTE =================
+    // ===========================================
+    // UNMUTE
+    // ===========================================
 
     if (interaction.commandName === 'unmute') {
 
@@ -304,25 +255,29 @@ client.on('interactionCreate', async interaction => {
 
             const user = interaction.options.getUser('user');
 
-            const member = await interaction.guild.members.fetch(user.id);
+            const member =
+                await interaction.guild.members.fetch(user.id);
 
             await member.timeout(null);
 
             await interaction.editReply({
-                content: `✅ ${user.tag} kullanıcısının mutesi kaldırıldı!`
+                content:
+                    `✅ ${user.tag} kullanıcısının mutesi kaldırıldı!`
             });
 
         } catch (err) {
 
             console.error(err);
 
-            await interaction.editReply({
-                content: "❌ Hata oluştu!"
+            interaction.editReply({
+                content: '❌ Hata oluştu!'
             });
         }
     }
 
-    // ================= BAN =================
+    // ===========================================
+    // BAN
+    // ===========================================
 
     if (interaction.commandName === 'ban') {
 
@@ -331,27 +286,46 @@ client.on('interactionCreate', async interaction => {
         try {
 
             const user = interaction.options.getUser('user');
-            const reason = interaction.options.getString('reason') || 'Belirtilmedi';
 
-            const member = await interaction.guild.members.fetch(user.id);
+            const reason =
+                interaction.options.getString('reason') || 'Belirtilmedi';
+
+            const member =
+                await interaction.guild.members.fetch(user.id);
+
+            // Yönetici koruması
+            if (
+                member.permissions.has(
+                    PermissionsBitField.Flags.Administrator
+                )
+            ) {
+
+                return interaction.editReply({
+                    content: '❌ Yönetici banlanamaz!'
+                });
+            }
 
             await member.ban({ reason });
 
             await interaction.editReply({
-                content: `🔨 ${user.tag} banlandı!`
+                content:
+                    `🔨 ${user.tag} banlandı!\n` +
+                    `📝 Sebep: ${reason}`
             });
 
         } catch (err) {
 
             console.error(err);
 
-            await interaction.editReply({
-                content: "❌ Hata oluştu!"
+            interaction.editReply({
+                content: '❌ Hata oluştu!'
             });
         }
     }
 
-    // ================= UNBAN =================
+    // ===========================================
+    // UNBAN
+    // ===========================================
 
     if (interaction.commandName === 'unban') {
 
@@ -359,32 +333,79 @@ client.on('interactionCreate', async interaction => {
 
         try {
 
-            const userId = interaction.options.getString('userid');
+            const userId =
+                interaction.options.getString('userid');
 
             await interaction.guild.members.unban(userId);
 
             await interaction.editReply({
-                content: `✅ ${userId} IDli kullanıcının banı kaldırıldı!`
+                content:
+                    `✅ ${userId} IDli kişinin banı kaldırıldı!`
             });
 
         } catch (err) {
 
             console.error(err);
 
-            await interaction.editReply({
-                content: "❌ Hata oluştu!"
+            interaction.editReply({
+                content: '❌ Hata oluştu!'
             });
         }
     }
 });
 
-// ================= MESSAGE KOMUTLARI =================
+// ===========================================
+// MESSAGE KOMUTLARI
+// ===========================================
 
 client.on('messageCreate', async message => {
 
     if (message.author.bot) return;
 
-    // ================= KUFUR SISTEMI =================
+    // ===========================================
+    // PARTNER PANEL
+    // ===========================================
+
+    if (message.content === '!partnerpanel') {
+
+        if (message.author.id !== OWNER_ID) return;
+
+        const embed = new EmbedBuilder()
+            .setColor('#111827')
+            .setTitle('📢 Partner Kanalı Erişimi')
+            .setDescription(
+                '### Partnerliği görmek istiyorsan aşağıdaki butona bas!\n\n' +
+                '> ✅ Butona bastığında otomatik partner rolü alırsın.'
+            )
+            .addFields({
+                name: '🎁 Avantajlar',
+                value:
+                    '• Partner kanalını görürsün\n' +
+                    '• Reklam paylaşabilirsin\n' +
+                    '• Partner duyurularını alırsın'
+            })
+            .setFooter({
+                text: 'Zenith Partner Sistemi'
+            });
+
+        const button = new ButtonBuilder()
+            .setCustomId('partner_role')
+            .setLabel('Partner Rolünü Al')
+            .setEmoji('✅')
+            .setStyle(ButtonStyle.Success);
+
+        const row = new ActionRowBuilder()
+            .addComponents(button);
+
+        return message.channel.send({
+            embeds: [embed],
+            components: [row]
+        });
+    }
+
+    // ===========================================
+    // KÜFÜR SİSTEMİ
+    // ===========================================
 
     const badWords = [
         "mal",
@@ -406,9 +427,12 @@ client.on('messageCreate', async message => {
 
         if (!member) return;
 
-        if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return;
-        }
+        // Yönetici koruması
+        if (
+            member.permissions.has(
+                PermissionsBitField.Flags.Administrator
+            )
+        ) return;
 
         const userId = member.id;
 
@@ -424,7 +448,8 @@ client.on('messageCreate', async message => {
 
             data = {
                 minutes: 5,
-                resetTime: now + (3 * 24 * 60 * 60 * 1000)
+                resetTime:
+                    now + (3 * 24 * 60 * 60 * 1000)
             };
 
         } else {
@@ -438,11 +463,12 @@ client.on('messageCreate', async message => {
 
         await member.timeout(
             data.minutes * 60 * 1000,
-            "Küfür / Hakaret"
+            'Küfür / Hakaret'
         );
 
         await member.send(
-            `🚫 KÜFÜR SUNUCUMUZDA YASAK DOSTUM!\n⛔ Ceza Süren: ${data.minutes} dakika`
+            `🚫 SUNUCUMUZDA KÜFÜR YASAK!\n` +
+            `⛔ Ceza Süresi: ${data.minutes} dakika`
         ).catch(() => {});
 
         return message.channel.send(
@@ -450,80 +476,66 @@ client.on('messageCreate', async message => {
         );
     }
 
-    // ================= AGONY =================
+    // ===========================================
+    // AGONY
+    // ===========================================
 
     if (message.content === '!agony') {
+
         return message.reply('BiDahAOlmAsIN');
     }
 
-    // ================= STOP =================
+    // ===========================================
+    // STOP
+    // ===========================================
 
     if (message.content === '!stop') {
 
-        if (message.author.id !== OWNER_ID) {
-            return;
-        }
+        if (message.author.id !== OWNER_ID) return;
 
         botActive = false;
 
-        return message.reply('⛔ Bot pasif moda alındı!');
+        return message.reply(
+            '⛔ Bot pasif moda alındı!'
+        );
     }
 
-    // ================= ACTIVE =================
+    // ===========================================
+    // ACTIVE
+    // ===========================================
 
     if (message.content === '!active') {
 
-        if (message.author.id !== OWNER_ID) {
-            return;
-        }
+        if (message.author.id !== OWNER_ID) return;
 
         botActive = true;
 
-        return message.reply('✅ Bot tekrar aktif edildi!');
+        return message.reply(
+            '✅ Bot tekrar aktif edildi!'
+        );
     }
 
-    // ================= YAZ =================
+    // ===========================================
+    // YAZ
+    // ===========================================
 
     if (message.content.startsWith('!yaz')) {
 
-        if (message.author.id !== OWNER_ID) {
-            return;
-        }
+        if (message.author.id !== OWNER_ID) return;
 
         await message.delete().catch(() => {});
 
-        const mentionedUser = message.mentions.users.first();
+        const text =
+            message.content.slice(5).trim();
 
-        let fullText = message.content.slice(5).trim();
+        if (!text) return;
 
-        // Reply sistemi
-        if (
-            mentionedUser &&
-            (
-                fullText.startsWith(`<@${mentionedUser.id}>`) ||
-                fullText.startsWith(`<@!${mentionedUser.id}>`)
-            )
-        ) {
-
-            let text = fullText
-                .replace(/<@!?\d+>/, '')
-                .trim();
-
-            const messages = await message.channel.messages.fetch({ limit: 20 });
-
-            const targetMessage = messages.find(
-                msg =>
-                    msg.author.id === mentionedUser.id
-            );
-
-            if (!targetMessage) return;
-
-            return targetMessage.reply(text);
-        }
-
-        // Normal bot mesajı
-        return message.channel.send(fullText);
+        return message.channel.send(text);
     }
 });
+
+// ===========================================
+// LOGIN
+// ===========================================
 
 client.login(TOKEN);
